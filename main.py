@@ -5,6 +5,59 @@ from numpy import array, ones
 from scipy.signal import lfilter, lfilter_zi, lfiltic, butter, iirpeak
 import matplotlib.pyplot as plt
 
+def main():
+    t = np.linspace(0, 4, 2000)
+    x = np.sin(2*np.pi*0.5*t)
+
+    s = len(x) * 3 // 8
+
+    x0 = x[0:s]
+    x1 = x[s:]
+
+    b0, a0 = butter(2, 0.01)
+    b1, a1 = iirpeak(0.01, 2, 2)
+    # z = lfilter_zi(b0, a0)
+
+    xi = [x[0], x[0]]
+    yi = np.zeros(2)
+    z = lfiltic(b0, a0, yi, xi)
+
+    # BAD
+    # ##########################
+    y0, z0 = lfilter(b0, a0, x0, zi=z)
+    y1, z1 = lfilter(b1, a1, x1, zi=z0)
+    y_bad = np.concatenate((y0, y1))
+
+    # GOOD
+    # ##########################
+    y0, z0 = lfilter(b0, a0, x0, zi=z)
+
+    xm = [x0[-1], x0[-2]]
+    ym = [y0[-1], y0[-2]]
+
+    zm = lfiltic(b1, a1, ym, xm)
+    zz = bq_new_z(b1, a1, ym, xm)
+    print(zm - zz)
+    y1, z1 = lfilter(b1, a1, x1, zi=zm)
+
+    y_good = np.concatenate((y0, y1))
+
+    # DF1 (Good as well)
+    # ##########################
+    # xi = [x[0], x[0]]
+    # yi = [0, 0]
+    # y0, xm, ym = bq_df1(b0, a0, x0, xi, yi)
+    # y1, _, _ = bq_df1(b1, a1, x1, xm, ym)
+    # y_good = np.concatenate((y0, y1))
+
+    # PLOT
+    # ##########################
+    plt.plot(t, x, t, y_bad, t, y_good)
+    plt.show()
+
+if __name__ == '__main__':
+    main()
+
 def bq_df2t(b, a, x, z):
     y = np.zeros(len(x))
     b0 = b[0]
@@ -54,57 +107,18 @@ def bq_df1(b, a, x, x_p, y_p):
 
     return y, x_p, y_p
 
-# z = lfilter_zi(b, a)
+# lfiltic implementation
+def bq_new_z(b, a, y, x):
+    assert(len(b) == 3)
+    assert(len(a) == 3)
+    assert(len(y) == 2)
+    assert(len(x) == 2)
 
-def main():
-    t = np.linspace(0, 4, 2000)
-    x = np.sin(2*np.pi*0.5*t)
+    z = np.zeros(2)
 
-    s = len(x) * 3 // 8
+    z[0] = b[1] * x[0] + b[2] * x[1]
+    z[1] = b[2] * x[0]
+    z[0] -= a[1] * y[0] + a[2] * y[1]
+    z[1] -= a[2] * y[0]
 
-    x0 = x[0:s]
-    x1 = x[s:]
-    # assert(len(x0) == len(x1))
-
-    b0, a0 = butter(2, 0.01)
-    b1, a1 = iirpeak(0.01, 2, 2)
-    # z = lfilter_zi(b0, a0)
-
-    xi = [x[0], x[0]]
-    yi = np.zeros(2)
-    z = lfiltic(b0, a0, yi, xi)
-
-    # BAD
-    # ##########################
-    y0, z0 = lfilter(b0, a0, x0, zi=z)
-    y1, z1 = lfilter(b1, a1, x1, zi=z0)
-    y_bad = np.concatenate((y0, y1))
-
-    # GOOD
-    # ##########################
-    y0, z0 = lfilter(b0, a0, x0, zi=z)
-
-    xm = [x0[-1], x0[-2]]
-    ym = [y0[-1], y0[-2]]
-
-    zm = lfiltic(b1, a1, ym, xm)
-    y1, z1 = lfilter(b1, a1, x1, zi=zm)
-
-    y_good = np.concatenate((y0, y1))
-
-    # DF1
-    # ##########################
-    xi = [x[0], x[0]]
-    yi = [0, 0]
-    y0, xm, ym = bq_df1(b0, a0, x0, xi, yi)
-    y1, _, _ = bq_df1(b1, a1, x1, xm, ym)
-    y_good = np.concatenate((y0, y1))
-
-
-    # PLOT
-    # ##########################
-    plt.plot(t, x, t, y_bad, t, y_good)
-    plt.show()
-
-if __name__ == '__main__':
-    main()
+    return z
